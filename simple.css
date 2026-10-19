@@ -7,13 +7,59 @@
  * Os elementos continuam na página (o main.js depende deles), só não aparecem.
  */
 
-/* Cabeçalho: sem salvar/carregar projeto, idioma e tema */
-.simple-mode #reset-settings-btn,
-.simple-mode #export-project-btn,
-.simple-mode label[for="import-project-input"],
-.simple-mode .project-io-gap,
-.simple-mode .lang-seg,
-.simple-mode #theme-toggle { display: none !important; }
+/* ── Cores e fonte da plataforma ──
+   Preto nas linhas e textos de destaque; amarelo só no que é ação principal
+   ou escolha ativa (com texto preto, como nos botões da plataforma). */
+.simple-mode {
+  --accent:       #1e1b1a;
+  --accent-hover: #3a3533;
+  --amber:        #fbbc09;
+  --amber-hover:  #ffc928;
+  --bg:           #faf6ee;
+  --surface:      #ffffff;
+  --surface2:     #faf6ee;
+  --border:       #e8e0d2;
+  --text:         #2a2622;
+  --text-muted:   #6b665d;
+  --radius:       12px;
+  --header-h:     0px;
+  font-family: "Poppins", system-ui, sans-serif;
+  background: var(--surface);
+}
+
+.simple-mode #export-btn {
+  min-height: 46px;
+  border: 2px solid var(--accent);
+  border-radius: 999px;
+  background: var(--amber);
+  color: var(--accent);
+  font-weight: 900;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  box-shadow: 3px 3px 0 var(--accent);
+}
+.simple-mode #export-btn:hover:not(:disabled) { background: var(--amber-hover); }
+.simple-mode #export-btn:active:not(:disabled) { transform: translate(3px, 3px); box-shadow: none; }
+.simple-mode #export-btn:disabled { opacity: .45; box-shadow: none; }
+
+.simple-mode .sm-seg .excl-seg-btn.active {
+  background: var(--amber);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 700;
+}
+.simple-mode .preset-swatch.active { border-color: var(--amber); box-shadow: 0 0 0 2px var(--accent); }
+.simple-mode .slider-row input[type="range"]::-webkit-slider-thumb { background: var(--amber); border: 2px solid var(--accent); }
+.simple-mode .slider-row input[type="range"]::-moz-range-thumb { background: var(--amber); border: 2px solid var(--accent); }
+.simple-mode .export-progress-bar { background: var(--amber); }
+.simple-mode input[type="checkbox"] { accent-color: var(--accent); }
+
+/* Sem moldura de janela: sem cabeçalho próprio, sem bordas externas.
+   Desfazer/refazer continuam no Ctrl+Z / Ctrl+Shift+Z. */
+.simple-mode > header { display: none !important; }
+
+/* Sem o aviso de doação (o crédito ao CNC Kitchen fica no rodapé do painel) */
+.simple-mode #store-cta-wrapper { display: none !important; }
 
 /* Rodapé do 3D: sem wireframe, perspectiva e corte */
 .simple-mode #viewport-footer .wireframe-toggle,

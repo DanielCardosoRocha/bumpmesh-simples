@@ -15,6 +15,8 @@
 const SOURCE_URL  = 'https://github.com/DanielCardosoRocha/bumpmesh-simples';
 const ORIGIN_URL  = 'https://github.com/CNCKitchen/stlTexturizer';
 
+import { setSceneBackground } from './viewer.js';
+
 const $ = (id) => document.getElementById(id);
 
 // Ângulo usado para "não texturizar" topo/base (o padrão do original para a base).
@@ -244,18 +246,6 @@ function buildPanel() {
   applyQuality();
 }
 
-function buildHeader() {
-  const logo = document.querySelector('header .logo span');
-  if (logo) {
-    logo.innerHTML = 'Texturizador 3D <small style="opacity:.6;font-weight:400">baseado no BumpMesh, da CNC Kitchen</small>';
-  }
-  const github = document.querySelector('header .github-link');
-  if (github) {
-    github.href = SOURCE_URL;
-    github.title = 'Código-fonte desta versão';
-    github.setAttribute('aria-label', 'Código-fonte desta versão');
-  }
-}
-
-buildHeader();
 buildPanel();
+// Fundo do 3D no creme da plataforma (o original usa um cinza azulado).
+setSceneBackground(0xfaf6ee);

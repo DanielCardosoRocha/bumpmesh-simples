@@ -457,7 +457,8 @@ const fragmentShader = /* glsl */`
     // that specular highlights, diffuse response, and view-dependent shading
     // are perfectly consistent everywhere.  Mask tinting is applied AFTER
     // lighting as a colour blend so masked areas keep the same glossy look.
-    vec3 tealBase      = vec3(0.22, 0.68, 0.68);
+    // Versão simplificada: amarelo da plataforma (#fbbc09) no lugar do teal original.
+    vec3 tealBase      = vec3(0.98, 0.74, 0.04);
     // Single layer: the familiar orange (painted out) and dark grey (angle
     // mask). Several layers: everything the active layer does not cover is a
     // plain neutral grey, so "teal = active layer" reads at a glance and the

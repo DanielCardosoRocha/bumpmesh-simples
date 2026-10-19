@@ -1,0 +1,100 @@
+/*
+ * Copyright (c) 2026 CNCKitchen (Stefan Hermann) and contributors
+ * Modificado em 2026 por Daniel Cardoso Rocha (versão simplificada)
+ * SPDX-License-Identifier: AGPL-3.0-only
+ *
+ * Modo simples: esconde os controles avançados do BumpMesh.
+ * Os elementos continuam na página (o main.js depende deles), só não aparecem.
+ */
+
+/* Cabeçalho: sem salvar/carregar projeto, idioma e tema */
+.simple-mode #reset-settings-btn,
+.simple-mode #export-project-btn,
+.simple-mode label[for="import-project-input"],
+.simple-mode .project-io-gap,
+.simple-mode .lang-seg,
+.simple-mode #theme-toggle { display: none !important; }
+
+/* Rodapé do 3D: sem wireframe, perspectiva e corte */
+.simple-mode #viewport-footer .wireframe-toggle,
+.simple-mode #section-controls,
+.simple-mode #cylinder-panel { display: none !important; }
+
+/* Carregar peça: sem "apoiar na face" e girar */
+.simple-mode #place-on-face-btn,
+.simple-mode #rotate-btn,
+.simple-mode #rotate-controls { display: none !important; }
+
+/* Textura: sem camadas, inverter e suavização do mapa */
+.simple-mode #layer-strip,
+.simple-mode .invert-texture-row,
+.simple-mode #texture-smoothing-val,
+.simple-mode .form-row:has(> #texture-smoothing) { display: none !important; }
+
+/* Seções originais que ficaram vazias ou saíram (projeção, deslocamento,
+   transformação, máscara, avançado/beta) */
+.simple-mode #settings-panel > .panel-section:not(.sm-section):not(.sm-advanced):not(:has(#export-btn)):not(:has(.load-stl-row)) {
+  display: none !important;
+}
+
+/* Exportar: só o STL, sem os controles técnicos de resolução */
+.simple-mode #smart-res-btn,
+.simple-mode #smart-res-info,
+.simple-mode .form-row:has(> #refine-length),
+.simple-mode .form-row:has(> .slider-stack #refine-length),
+.simple-mode .form-row:has(> #max-triangles),
+.simple-mode #resolution-warning,
+.simple-mode #export-3mf-btn { display: none !important; }
+
+/* Ajustes: sem o tamanho V e o cadeado (U e V ficam iguais) */
+.simple-mode .lock-row,
+.simple-mode .form-row:has(> #scale-v),
+.simple-mode .advanced-blurb { display: none !important; }
+
+/* Links e janelas do site original */
+.simple-mode #welcome-link,
+.simple-mode #license-link,
+.simple-mode #imprint-link,
+.simple-mode #welcome-overlay,
+.simple-mode #sponsor-overlay { display: none !important; }
+
+/* ── Controles novos ── */
+.simple-mode .sm-seg {
+  display: flex;
+  width: 100%;
+  margin-bottom: 6px;
+}
+.simple-mode .sm-seg .excl-seg-btn { flex: 1; }
+
+.simple-mode .sm-note {
+  margin: 4px 0 0;
+  font-size: .75rem;
+  color: var(--text-muted);
+}
+.simple-mode .sm-warning { color: var(--danger); }
+
+.simple-mode .sm-section .preset-grid { margin-bottom: 8px; }
+.simple-mode .sm-section .gallery-open-btn { width: 100%; justify-content: center; }
+
+.simple-mode .sm-advanced summary {
+  cursor: pointer;
+  font-size: .8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--text-muted);
+  list-style: none;
+}
+.simple-mode .sm-advanced summary::before { content: '▸ '; }
+.simple-mode .sm-advanced[open] summary::before { content: '▾ '; }
+.simple-mode .sm-advanced[open] summary { margin-bottom: 10px; }
+.simple-mode .sm-advanced .map-actions { margin: 8px 0; }
+
+.simple-mode .sm-footer {
+  margin: 12px 16px 20px;
+  font-size: .72rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+  text-align: center;
+}
+.simple-mode .sm-footer a { color: inherit; }

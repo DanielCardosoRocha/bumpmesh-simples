@@ -1,3 +1,18 @@
+# Texturizador 3D (BumpMesh simplificado)
+
+Versão simplificada do [BumpMesh](https://github.com/CNCKitchen/stlTexturizer), de Stefan Hermann (CNC Kitchen), usada na aba Ferramentas da plataforma. Licença AGPL-3.0, igual à original.
+
+## O que mudou em relação ao original
+
+- Tela reduzida: peça, textura, formato (redonda/reta), profundidade, tamanho, qualidade (leve/normal/detalhado) e baixar STL.
+- Seção "Avançado": suavizar emendas, girar textura, usar imagem própria, texturizar topo/base e prévia 3D real.
+- Interface em português, sem a janela de novidades e sem o pop-up de apoio na exportação. O crédito ao CNC Kitchen fica no rodapé do painel.
+- O motor de textura é o original, sem alterações. As mudanças estão em `js/simple.js`, `simple.css`, no início do `index.html` e na última linha do `js/main.js`.
+
+Para trazer atualizações do original: `git pull https://github.com/CNCKitchen/stlTexturizer main`.
+
+---
+
 # BumpMesh by CNC Kitchen
 
 **Live:** https://bumpmesh.com  

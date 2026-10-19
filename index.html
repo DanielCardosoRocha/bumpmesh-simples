@@ -3,11 +3,11 @@
   Copyright (c) 2026 CNCKitchen (Stefan Hermann) and contributors
   SPDX-License-Identifier: AGPL-3.0-only
 -->
-<html lang="en" data-lang="en">
+<html lang="pt" data-lang="pt">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BumpMesh by CNC Kitchen</title>
+  <title>Texturizador 3D (baseado no BumpMesh)</title>
   <meta name="description" content="BumpMesh by CNC Kitchen is a browser-based tool for adding displacement textures to STL, OBJ, and 3MF models locally, then exporting printable textured meshes." />
   <link rel="canonical" href="https://bumpmesh.com/" />
   <meta property="og:locale" content="en_US" />
@@ -29,6 +29,18 @@
   <meta name="twitter:image:alt" content="BumpMesh interface for previewing and exporting textured 3D models" />
   <link rel="icon" type="image/png" href="logo.png" />
   <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="simple.css" />
+  <script>
+    // Modo simples: português, sem a janela de novidades e sem o pop-up de
+    // apoio na exportação (o crédito ao CNC Kitchen fica no rodapé do painel).
+    // ?theme=light|dark deixa a página que embute escolher o tema.
+    try {
+      localStorage.setItem('stlt-lang', 'pt');
+      sessionStorage.setItem('stlt-no-sponsor', '1');
+      const forced = new URLSearchParams(location.search).get('theme');
+      if (forced === 'light' || forced === 'dark') localStorage.setItem('stlt-theme', forced);
+    } catch { /* modo privado */ }
+  </script>
   <script>
     // Apply saved theme before first paint to avoid flash
     (function() {
@@ -51,7 +63,7 @@
   </script>
   <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js">
 </head>
-<body>
+<body class="simple-mode">
   <header>
     <div class="logo">
       <img src="logo.png" alt="BumpMesh" width="24" height="24" />

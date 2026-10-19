@@ -6608,4 +6608,5 @@ _baselineSnapshot = _captureUndoSnapshot();
 _updateUndoButtons();
 
 // Modo simples (versão simplificada): monta a tela reduzida depois que o app inicia.
-await import('./simple.js');
+const { initSimple } = await import('./simple.js');
+initSimple({ selectPreset, activeMapName: () => activeMapEntry?.name ?? null });

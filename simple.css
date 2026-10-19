@@ -144,3 +144,21 @@
   text-align: center;
 }
 .simple-mode .sm-footer a { color: inherit; }
+
+/* ── Modo embutido (?embed=1): só o 3D ──
+   Os controles ficam na página que embute; o painel original continua no
+   DOM (o main.js depende dele), só não aparece. */
+.embed-mode #settings-panel,
+.embed-mode #sidebar-toggle,
+.embed-mode #gallery-panel,
+.embed-mode #viewport-footer,
+.embed-mode #mesh-diagnostics { display: none !important; }
+.embed-mode main { flex-direction: row !important; }
+.embed-mode #viewport-section {
+  flex: 1 1 auto !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  max-height: none !important;
+}
+.embed-mode { background: var(--bg); }

@@ -7,6 +7,7 @@ Versão simplificada do [BumpMesh](https://github.com/CNCKitchen/stlTexturizer),
 - Tela reduzida: peça, textura, formato (redonda/reta), profundidade, tamanho, qualidade (leve/normal/detalhado) e baixar STL.
 - Seção "Avançado": suavizar emendas, girar textura, usar imagem própria, texturizar topo/base e prévia 3D real.
 - Interface em português, com as cores e a fonte da plataforma, sem cabeçalho próprio, sem a janela de novidades e sem os avisos de doação. O crédito ao CNC Kitchen e o link do código-fonte ficam no rodapé do painel.
+- Modo embutido (`index.html?embed=1`): mostra só o 3D. A página que embute (mesma origem) manda comandos e recebe o estado por `postMessage`; o protocolo está no fim de `js/simple.js`.
 - O motor de textura é o original, sem alterações. As mudanças estão em `js/simple.js`, `simple.css`, no início do `index.html` e na última linha do `js/main.js`.
 
 Para trazer atualizações do original: `git pull https://github.com/CNCKitchen/stlTexturizer main`.

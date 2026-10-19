@@ -4,18 +4,23 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-// Modo simples: uma tela com poucos controles por cima do BumpMesh original.
+// Modo simples: poucos controles por cima do BumpMesh original.
 //
-// Nada do motor foi reescrito. Este arquivo esconde os controles avançados,
-// reorganiza o painel e liga cada controle simples aos campos originais
-// (mudando o valor e disparando o mesmo evento que o usuário dispararia).
-// Assim o main.js continua igual ao do CNC Kitchen e atualizações do
-// repositório original entram sem conflito.
+// Nada do motor foi reescrito. Cada controle simples muda o campo original
+// correspondente e dispara o mesmo evento que o usuário dispararia, então o
+// main.js continua igual ao do CNC Kitchen e atualizações do repositório
+// original entram sem conflito.
+//
+// Dois jeitos de usar:
+//   index.html          painel simples ao lado do 3D (página sozinha)
+//   index.html?embed=1  só o 3D; quem embute manda comandos e recebe o estado
+//                       por postMessage (veja "Modo embutido" no fim)
+
+import { setSceneBackground } from './viewer.js';
+import { IMAGE_PRESETS, PRESET_CATEGORIES, DEFAULT_FAVOURITES } from './presetTextures.js';
 
 const SOURCE_URL  = 'https://github.com/DanielCardosoRocha/bumpmesh-simples';
 const ORIGIN_URL  = 'https://github.com/CNCKitchen/stlTexturizer';
-
-import { setSceneBackground } from './viewer.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -38,6 +43,135 @@ function setInput(el, value, event = 'change') {
   el.value = value;
   el.dispatchEvent(new Event(event, { bubbles: true }));
 }
+
+function setFile(input, file) {
+  const dt = new DataTransfer();
+  dt.items.add(file);
+  input.files = dt.files;
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+const isHidden = (el) => !el || el.classList.contains('hidden');
+
+// ── Avisos de mudança ────────────────────────────────────────────────────────
+// Qualquer mudança no estado (campo, peça carregada, textura, exportação)
+// avisa os ouvintes uma vez, agrupada.
+
+const listeners = new Set();
+let notifyTimer = 0;
+function notify() {
+  clearTimeout(notifyTimer);
+  notifyTimer = setTimeout(() => { for (const fn of listeners) fn(); }, 30);
+}
+
+// ── Comandos ─────────────────────────────────────────────────────────────────
+
+let app = null;   // { selectPreset, activeMapName } vindos do main.js
+let quality = 'normal';
+let baseEdge = 1;
+let lastApplied = null;
+
+function applyQuality() {
+  const q = QUALITY[quality];
+  const edge = Math.max(0.05, Math.min(5, +(baseEdge * q.edge).toFixed(2)));
+  lastApplied = String(edge);
+  setInput($('refine-length-val'), edge);
+  setInput($('max-triangles'), q.tris, 'input');
+}
+
+const controls = {
+  setShape(value) {
+    if (!SHAPES[value]) return;
+    setInput($('mapping-mode'), SHAPES[value]);
+    // Para vasos e copos, ajusta o eixo do cilindro ao centro real da peça.
+    if (value === 'redonda') $('cylinder-autofit-btn')?.click();
+  },
+  setQuality(value) {
+    if (!QUALITY[value]) return;
+    quality = value;
+    applyQuality();
+  },
+  setAmplitude(mm) { if (Number.isFinite(mm)) setInput($('amplitude-val'), mm); },
+  setScale(mm)     { if (Number.isFinite(mm) && mm > 0) setInput($('scale-u-val'), mm); },
+  setSeam(v)       { if (Number.isFinite(v)) setInput($('seam-band-width-val'), v); },
+  setRotation(deg) { if (Number.isFinite(deg)) setInput($('rotation-val'), deg); },
+  setTop(on)    { setInput($('top-angle-limit'), on ? 0 : MASK_ANGLE, 'input'); },
+  setBottom(on) { setInput($('bottom-angle-limit'), on ? 0 : MASK_ANGLE, 'input'); },
+  setPreview(on) {
+    const box = $('displacement-preview');
+    if (box.checked === !!on) return;
+    box.checked = !!on;
+    box.dispatchEvent(new Event('change', { bubbles: true }));
+  },
+  loadModel(file)   { if (file instanceof File) setFile($('stl-file-input'), file); },
+  loadTexture(file) { if (file instanceof File) setFile($('texture-file-input'), file); },
+  async selectTexture(name) {
+    const idx = IMAGE_PRESETS.findIndex((p) => p.name === name);
+    if (idx < 0) return;
+    await app.selectPreset(idx);
+    notify();
+  },
+  exportStl() {
+    const btn = $('export-btn');
+    if (!btn.disabled) btn.click();
+  },
+};
+
+function readState() {
+  return {
+    info: $('mesh-info').textContent,
+    texture: app.activeMapName(),
+    shape: $('mapping-mode').value === SHAPES.redonda ? 'redonda' : 'reta',
+    quality,
+    amplitude: Number($('amplitude-val').value),
+    scale: Number($('scale-u-val').value),
+    seam: Number($('seam-band-width-val').value),
+    rotation: Number($('rotation-val').value),
+    top: Number($('top-angle-limit').value) === 0,
+    bottom: Number($('bottom-angle-limit').value) === 0,
+    preview: $('displacement-preview').checked,
+    canExport: !$('export-btn').disabled,
+    exporting: !isHidden($('export-progress')),
+    progress: parseFloat($('export-progress-bar').style.width) || 0,
+    progressLabel: $('export-progress-label').textContent,
+    amplitudeWarning: !isHidden($('amplitude-warning')),
+    // Resultado da checagem rápida da malha ("✔ A malha parece boa" ou o problema).
+    meshCheck: isHidden($('mesh-diagnostics')) ? null : $('mesh-diag-fast').textContent.trim() || null,
+  };
+}
+
+function watchChanges() {
+  const panel = $('settings-panel');
+  panel.addEventListener('input', notify);
+  panel.addEventListener('change', notify);
+  window.addEventListener('keydown', (e) => { if (e.ctrlKey || e.metaKey) notify(); });
+
+  const observe = (el, opts) => el && new MutationObserver(notify).observe(el, opts);
+  observe($('export-progress'), { attributes: true, childList: true, characterData: true, subtree: true });
+  observe($('export-btn'), { attributes: true, attributeFilter: ['disabled'] });
+  observe($('amplitude-warning'), { attributes: true, attributeFilter: ['class'] });
+  observe($('mesh-diagnostics'), { attributes: true, childList: true, characterData: true, subtree: true });
+  // A textura ativa é marcada na grade de favoritos (inclusive a escolhida no início).
+  observe($('preset-grid'), { attributes: true, subtree: true, attributeFilter: ['class'] });
+
+  // A cada peça carregada o original recalcula a resolução para o tamanho dela.
+  // Esse valor vira a base, e a qualidade escolhida é aplicada por cima.
+  new MutationObserver(() => {
+    const refine = $('refine-length-val');
+    if (refine.value !== lastApplied) {
+      baseEdge = Number(refine.value) || baseEdge;
+      applyQuality();
+    }
+    notify();
+  }).observe($('mesh-info'), { childList: true, characterData: true, subtree: true });
+
+  // Garante a qualidade escolhida no momento de baixar (antes do handler original).
+  $('export-btn').addEventListener('click', () => {
+    if ($('refine-length-val').value !== lastApplied) applyQuality();
+  }, { capture: true });
+}
+
+// ── Painel simples (página sozinha) ──────────────────────────────────────────
 
 function setLabel(el, text, title) {
   if (!el) return;
@@ -107,6 +241,7 @@ function note(text, extraClass = '') {
 function buildPanel() {
   const panel = $('settings-panel');
   const firstSection = panel.querySelector('.panel-section');   // Carregar modelo
+  const state = readState();
 
   // ── 1. Peça ──
   const loadHeading = document.createElement('h2');
@@ -117,13 +252,7 @@ function buildPanel() {
   const textureSection = section('Textura', $('preset-grid'), $('texture-gallery-btn'));
 
   // ── 3. Formato da peça ──
-  const mapping = $('mapping-mode');
-  const currentShape = mapping.value === SHAPES.redonda ? 'redonda' : 'reta';
-  const shape = segmented({ redonda: 'Redonda', reta: 'Reta / caixa' }, currentShape, (value) => {
-    setInput(mapping, SHAPES[value]);
-    // Para vasos e copos, ajusta o eixo do cilindro ao centro real da peça.
-    if (value === 'redonda') $('cylinder-autofit-btn')?.click();
-  });
+  const shape = segmented({ redonda: 'Redonda', reta: 'Reta / caixa' }, state.shape, controls.setShape);
   const shapeSection = section('Formato da peça', shape.el,
     note('Redonda: vasos, copos, cilindros. Reta: caixas, suportes e o resto.'));
 
@@ -137,11 +266,7 @@ function buildPanel() {
   const adjustSection = section('Ajustes', amplitudeRow, scaleRow, $('amplitude-warning'));
 
   // ── 5. Qualidade + exportar ──
-  let quality = 'normal';
-  const qualitySeg = segmented({ leve: 'Leve', normal: 'Normal', detalhado: 'Detalhado' }, quality, (value) => {
-    quality = value;
-    applyQuality();
-  });
+  const qualitySeg = segmented({ leve: 'Leve', normal: 'Normal', detalhado: 'Detalhado' }, quality, controls.setQuality);
   const exportSection = $('export-btn').closest('.panel-section');
   setLabel(exportSection.querySelector('h2'), 'Qualidade');
   exportSection.querySelector('h2').after(qualitySeg.el,
@@ -168,16 +293,10 @@ function buildPanel() {
   uploadRow.className = 'map-actions';
   uploadRow.appendChild(uploadLabel);
 
-  const topSlider = $('top-angle-limit');
-  const bottomSlider = $('bottom-angle-limit');
-  const top = checkbox('Texturizar o topo', Number(topSlider.value) === 0,
-    (on) => setInput(topSlider, on ? 0 : MASK_ANGLE, 'input'));
+  const top = checkbox('Texturizar o topo', state.top, controls.setTop);
   const bottomWarning = note('A base com textura pode reduzir a aderência na mesa.', 'sm-warning');
-  const bottom = checkbox('Texturizar a base', Number(bottomSlider.value) === 0, (on) => {
-    setInput(bottomSlider, on ? 0 : MASK_ANGLE, 'input');
-    bottomWarning.hidden = !on;
-  });
-  bottomWarning.hidden = !bottom.input.checked;
+  const bottom = checkbox('Texturizar a base', state.bottom, controls.setBottom);
+  bottomWarning.hidden = !state.bottom;
 
   const previewRow = $('displacement-preview').closest('.form-row');
   setLabel(previewRow.querySelector('label span'), 'Prévia 3D real (mais pesada)');
@@ -206,46 +325,89 @@ function buildPanel() {
 
   // Mantém os controles simples em dia quando o original muda os valores
   // (desfazer, restauração da sessão).
-  const sync = () => {
-    shape.select(mapping.value === SHAPES.redonda ? 'redonda' : 'reta');
-    top.input.checked = Number(topSlider.value) === 0;
-    bottom.input.checked = Number(bottomSlider.value) === 0;
-    bottomWarning.hidden = !bottom.input.checked;
-  };
-  for (const id of ['undo-btn', 'redo-btn']) $(id)?.addEventListener('click', () => setTimeout(sync, 0));
-  window.addEventListener('keydown', (e) => { if (e.ctrlKey || e.metaKey) setTimeout(sync, 0); });
-
-  // ── Qualidade ligada à resolução e ao limite de triângulos do original ──
-  const refineVal = $('refine-length-val');
-  const maxTri = $('max-triangles');
-  let baseEdge = Number(refineVal.value) || 1;
-  let lastApplied = null;
-
-  function applyQuality() {
-    const q = QUALITY[quality];
-    const edge = Math.max(0.05, Math.min(5, +(baseEdge * q.edge).toFixed(2)));
-    lastApplied = String(edge);
-    setInput(refineVal, edge);
-    setInput(maxTri, q.tris, 'input');
-  }
-
-  // A cada peça carregada o original recalcula a resolução para o tamanho dela.
-  // Esse valor vira a base, e a qualidade escolhida é aplicada por cima.
-  new MutationObserver(() => {
-    if (refineVal.value !== lastApplied) {
-      baseEdge = Number(refineVal.value) || baseEdge;
-      applyQuality();
-    }
-  }).observe($('mesh-info'), { childList: true, characterData: true, subtree: true });
-
-  // Garante a qualidade escolhida no momento de baixar (antes do handler original).
-  $('export-btn').addEventListener('click', () => {
-    if (refineVal.value !== lastApplied) applyQuality();
-  }, { capture: true });
-
-  applyQuality();
+  listeners.add(() => {
+    const s = readState();
+    shape.select(s.shape);
+    top.input.checked = s.top;
+    bottom.input.checked = s.bottom;
+    bottomWarning.hidden = !s.bottom;
+  });
 }
 
-buildPanel();
-// Fundo do 3D no creme da plataforma (o original usa um cinza azulado).
-setSceneBackground(0xfaf6ee);
+// ── Modo embutido ────────────────────────────────────────────────────────────
+// A página que embute (mesma origem) manda { source: 'tc-texturizador', type, value }
+// e recebe { source: 'bumpmesh', type: 'ready' | 'state', ... }.
+//
+//   hello                    pede o 'ready' de novo (lista de texturas + estado)
+//   model / texture-file     value: File
+//   texture                  value: nome da textura (IMAGE_PRESETS[].name)
+//   shape                    'redonda' | 'reta'
+//   quality                  'leve' | 'normal' | 'detalhado'
+//   amplitude / scale        mm
+//   seam / rotation          0–1 / graus
+//   top / bottom / preview   boolean
+//   export                   baixa o STL
+
+const COMMANDS = {
+  model: (v) => controls.loadModel(v),
+  'texture-file': (v) => controls.loadTexture(v),
+  texture: (v) => controls.selectTexture(v),
+  shape: (v) => controls.setShape(v),
+  quality: (v) => controls.setQuality(v),
+  amplitude: (v) => controls.setAmplitude(Number(v)),
+  scale: (v) => controls.setScale(Number(v)),
+  seam: (v) => controls.setSeam(Number(v)),
+  rotation: (v) => controls.setRotation(Number(v)),
+  top: (v) => controls.setTop(!!v),
+  bottom: (v) => controls.setBottom(!!v),
+  preview: (v) => controls.setPreview(!!v),
+  export: () => controls.exportStl(),
+};
+
+function initEmbed() {
+  const host = window.parent;
+  if (host === window) return;
+  const post = (msg) => host.postMessage({ source: 'bumpmesh', ...msg }, location.origin);
+  const sendReady = () => post({
+    type: 'ready',
+    presets: IMAGE_PRESETS.map((p) => ({
+      name: p.name,
+      thumb: new URL(p.thumb, location.href).pathname,
+      category: p.category,
+      credit: p.credit ?? null,
+    })),
+    categories: PRESET_CATEGORIES.map((c) => c.id),
+    favourites: DEFAULT_FAVOURITES,
+    state: readState(),
+  });
+
+  window.addEventListener('message', (e) => {
+    if (e.origin !== location.origin || e.source !== host) return;
+    const m = e.data;
+    if (!m || m.source !== 'tc-texturizador') return;
+    if (m.type === 'hello') { sendReady(); return; }
+    const run = COMMANDS[m.type];
+    if (!run) return;
+    Promise.resolve(run(m.value)).catch((err) => console.error('[embed]', m.type, err));
+    notify();
+  });
+
+  listeners.add(() => post({ type: 'state', state: readState() }));
+  sendReady();
+}
+
+export function initSimple(appApi) {
+  app = appApi;
+  const embedded = new URLSearchParams(location.search).has('embed');
+  if (embedded) document.body.classList.add('embed-mode');
+
+  baseEdge = Number($('refine-length-val').value) || 1;
+  watchChanges();
+  if (!embedded) buildPanel();
+  applyQuality();
+
+  // Fundo do 3D no creme da plataforma (o original usa um cinza azulado).
+  setSceneBackground(0xfaf6ee);
+
+  if (embedded) initEmbed();
+}

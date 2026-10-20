@@ -146,6 +146,11 @@ const controls = {
   resumeMarking() {
     if (maskMode && maskMode !== 'all') setMarking(true);
   },
+  /** Liga ou pausa a marcação sem mudar o modo nem apagar as marcas. */
+  setMarkingOn(on) {
+    if (on) controls.resumeMarking();
+    else setMarking(false);
+  },
   undo() {
     app.undo();
     // O desfazer pode voltar o modo; acompanha o que o original mostra.
@@ -443,6 +448,7 @@ function buildPanel() {
 //   erase                    boolean (marcar apaga em vez de marcar)
 //   mask-clear               limpa a marcação
 //   mask-resume              volta a marcar depois de uma pausa (Esc, prévia real)
+//   marking                  boolean: liga ou pausa a marcação (as marcas ficam)
 //   undo                     desfaz a última ação (qualquer ajuste, como Ctrl+Z)
 
 const COMMANDS = {
@@ -465,6 +471,7 @@ const COMMANDS = {
   erase: (v) => controls.setErase(!!v),
   'mask-clear': () => controls.clearMask(),
   'mask-resume': () => controls.resumeMarking(),
+  marking: (v) => controls.setMarkingOn(!!v),
   undo: () => controls.undo(),
 };
 

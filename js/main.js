@@ -82,8 +82,9 @@ let triangleCentroids  = null;        // Float32Array from buildAdjacency
 let triangleFaceNormals = null;       // Float32Array — local-space unit face normal per tri
 let exclusionTool      = null;        // 'brush' | 'bucket' | null
 let eraseMode          = false;
-// Versão simplificada: destaque do mouse em azul (o amarelo original some na peça amarela).
-const HOVER_COLOR      = 0x29c8ff;
+// Versão simplificada: destaque do mouse em branco, que clareia a face sem mudar
+// a cor (o amarelo original some na peça amarela; azul sobre amarelo vira verde).
+const HOVER_COLOR      = 0xffffff;
 let brushIsRadius      = true;
 let brushRadius        = 5.0;
 let brushHardness      = 0.5;         // circle brush: 1 = hard, leaf-exact; < 1 = soft, coverage per tree vertex

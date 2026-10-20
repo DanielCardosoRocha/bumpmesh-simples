@@ -100,6 +100,12 @@ let rotateAngles       = { x: 0, y: 0, z: 0 };  // accumulated rotation in degre
 let _rotateOriginalPositions = null;  // Float32Array snapshot before any rotation
 const _raycaster       = new THREE.Raycaster();
 let _lastPaintHitPoint = null;        // THREE.Vector3 — last brush paint position for shift-line
+// Versão simplificada, "marcação automática": com o pincel ativo, clique rápido
+// na peça marca a face inteira (balde) e clicar e arrastar pinta. O toque gera
+// o mesmo clique, então no celular tocar marca a face.
+let autoMarking        = false;
+let _autoPress         = null;        // { x, y, triIdx, event } — clique ainda sem arraste
+const AUTO_DRAG_PX     = 5;
 let _strokeLastPoint   = null;        // THREE.Vector3 — previous point of the current drag (soft brush sweeps from it)
 let _shiftLineMesh     = null;        // THREE.Line — preview line from last paint to cursor
 
@@ -2025,6 +2031,11 @@ function wireEvents() {
       e.preventDefault();
       updateMaskingTriDebug(e);
       getControls().enabled = false;
+      if (autoMarking) {
+        // Ainda não se sabe se é clique (face inteira) ou arraste (pincel).
+        _autoPress = { x: e.clientX, y: e.clientY, triIdx, event: e };
+        return;
+      }
       isPainting = true;
       _strokeLastPoint = null;
       _lastHoverTriIdx = -1;
@@ -2038,6 +2049,15 @@ function wireEvents() {
   let _hoverRafId = 0;
 
   canvas.addEventListener('mousemove', (e) => {
+    if (_autoPress && Math.hypot(e.clientX - _autoPress.x, e.clientY - _autoPress.y) >= AUTO_DRAG_PX) {
+      const start = _autoPress.event;
+      _autoPress = null;
+      isPainting = true;
+      _strokeLastPoint = null;
+      _lastHoverTriIdx = -1;
+      setHoverPreview(null);
+      paintAt(start);
+    }
     // Paint-Events sofort verarbeiten (jeder Event zaehlt fuer lueckenloses Malen)
     if (isPainting && exclusionTool === 'brush') {
       paintAt(e);
@@ -2063,7 +2083,7 @@ function wireEvents() {
         if (placeOnFaceActive && currentGeometry) { updatePlaceOnFaceHover(ev); return; }
         if (exclusionTool === 'brush') {
           updateBrushCursor(ev);
-          if (!isPainting && currentGeometry) updateBrushHover(ev);
+          if (!isPainting && currentGeometry) (autoMarking ? updateBucketHover : updateBrushHover)(ev);
           _updateShiftLinePreview(ev);
         } else if (exclusionTool === 'bucket' && !isPainting && currentGeometry) {
           updateBucketHover(ev);
@@ -2079,6 +2099,20 @@ function wireEvents() {
   });
 
   document.addEventListener('mouseup', () => {
+    if (_autoPress) {
+      const { triIdx } = _autoPress;
+      _autoPress = null;
+      getControls().enabled = true;
+      if (paintTree) {
+        paintTree.paintFaces(_activeSlot(), bucketFill(triIdx, triangleAdjacency, bucketThreshold), eraseMode);
+        refreshExclusionOverlay();
+        _lastHoverTriIdx = -1;
+        setHoverPreview(null);
+        _flushUndoCapture();
+        _commitUndoCapture();
+      }
+      return;
+    }
     if (!isPainting) return;
     isPainting = false;
     _strokeLastPoint = null;
@@ -6616,4 +6650,6 @@ initSimple({
   activeMapName: () => activeMapEntry?.name ?? null,
   // Apagar marcação sem precisar segurar Shift (celular, tablet, mouse só).
   setErase: (on) => { eraseMode = !!on; },
+  setAutoMarking: (on) => { autoMarking = !!on; _autoPress = null; },
+  undo: () => _undo(),
 });

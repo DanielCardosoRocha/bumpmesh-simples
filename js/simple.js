@@ -16,7 +16,8 @@
 //   index.html?embed=1  só o 3D; quem embute manda comandos e recebe o estado
 //                       por postMessage (veja "Modo embutido" no fim)
 
-import { setSceneBackground } from './viewer.js';
+import * as THREE from 'three';
+import { setSceneBackground, getControls } from './viewer.js';
 import { IMAGE_PRESETS, PRESET_CATEGORIES, DEFAULT_FAVOURITES } from './presetTextures.js';
 
 const SOURCE_URL  = 'https://github.com/DanielCardosoRocha/bumpmesh-simples';
@@ -105,6 +106,8 @@ const controls = {
     if (box.checked === !!on) return;
     box.checked = !!on;
     box.dispatchEvent(new Event('change', { bubbles: true }));
+    // A prévia real desliga a marcação (original); ao sair dela, volta a marcar.
+    if (!on) controls.resumeMarking();
   },
   loadModel(file)   { if (file instanceof File) setFile($('stl-file-input'), file); },
   loadTexture(file) { if (file instanceof File) setFile($('texture-file-input'), file); },
@@ -133,8 +136,21 @@ const controls = {
       $('excl-mode-include').click();
     } else if (mode === 'exclude') {
       $('excl-mode-exclude').click();
+    } else {
+      return;
     }
     maskMode = mode;
+    setMarking(mode !== 'all');
+  },
+  /** Volta a marcar depois de uma pausa (Esc, Prévia 3D real). */
+  resumeMarking() {
+    if (maskMode && maskMode !== 'all') setMarking(true);
+  },
+  undo() {
+    app.undo();
+    // O desfazer pode voltar o modo; acompanha o que o original mostra.
+    if (isActive($('excl-mode-include'))) maskMode = 'include';
+    else if (maskMode === 'include') maskMode = 'exclude';
   },
   /** 'bucket' (face inteira), 'brush' (pincel) ou null (só girar a peça). */
   setTool(tool) {
@@ -153,6 +169,19 @@ const controls = {
 };
 
 const isActive = (el) => !!el && el.classList.contains('active');
+
+/**
+ * Marcação automática: pincel ativo em que clique rápido marca a face inteira
+ * e arrastar pinta (main.js). Enquanto marca, o botão direito gira a peça
+ * (no original ele move a câmera), para dar para girar mesmo com a peça
+ * ocupando o 3D todo.
+ */
+function setMarking(on) {
+  app.setAutoMarking(on);
+  controls.setTool(on ? 'brush' : null);
+  const orbit = getControls();
+  if (orbit) orbit.mouseButtons.RIGHT = on ? THREE.MOUSE.ROTATE : THREE.MOUSE.PAN;
+}
 
 function activeTool() {
   if (isActive($('excl-brush-btn'))) return 'brush';
@@ -187,6 +216,7 @@ function readState() {
     tool: activeTool(),
     brushSize: Number($('excl-brush-radius-val').value),
     erase,
+    canUndo: !$('undo-btn').disabled,
     /** "12 faces selecionadas" / "3 faces mascaradas" */
     maskCount: $('excl-count').textContent.trim(),
   };
@@ -210,6 +240,7 @@ function watchChanges() {
     observe($(id), { attributes: true, attributeFilter: ['class'] });
   }
   observe($('excl-count'), { childList: true, characterData: true, subtree: true });
+  observe($('undo-btn'), { attributes: true, attributeFilter: ['disabled'] });
   // Shift no teclado também apaga; ao soltar, volta ao que o botão diz.
   document.addEventListener('keyup', (e) => { if (e.key === 'Shift' && erase) app.setErase(true); });
 
@@ -411,6 +442,8 @@ function buildPanel() {
 //   brush-size               mm (diâmetro do pincel)
 //   erase                    boolean (marcar apaga em vez de marcar)
 //   mask-clear               limpa a marcação
+//   mask-resume              volta a marcar depois de uma pausa (Esc, prévia real)
+//   undo                     desfaz a última ação (qualquer ajuste, como Ctrl+Z)
 
 const COMMANDS = {
   model: (v) => controls.loadModel(v),
@@ -431,6 +464,8 @@ const COMMANDS = {
   'brush-size': (v) => controls.setBrushSize(Number(v)),
   erase: (v) => controls.setErase(!!v),
   'mask-clear': () => controls.clearMask(),
+  'mask-resume': () => controls.resumeMarking(),
+  undo: () => controls.undo(),
 };
 
 function initEmbed() {

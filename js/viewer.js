@@ -1003,7 +1003,8 @@ export function setSceneBackground(hexColor) {
 
 export function setViewerTheme(isLight) {
   if (!scene) return;
-  scene.background = new THREE.Color(isLight ? 0xf0f0f5 : 0x111114);
+  // Versão simplificada: fundo claro no creme da plataforma desde o início.
+  scene.background = new THREE.Color(isLight ? 0xfaf6ee : 0x111114);
   const savedZ = grid ? grid.position.z : 0;
   if (grid) {
     scene.remove(grid);

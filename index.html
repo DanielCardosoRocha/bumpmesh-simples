@@ -36,6 +36,11 @@
     // Modo simples: português, sem a janela de novidades e sem o pop-up de
     // apoio na exportação (o crédito ao CNC Kitchen fica no rodapé do painel).
     // ?theme=light|dark deixa a página que embute escolher o tema.
+    // Modo embutido desde o primeiro quadro: sem isso a tela original aparece
+    // por um instante antes do JavaScript ligar o modo (a "piscada").
+    if (new URLSearchParams(location.search).has('embed')) {
+      document.documentElement.classList.add('embed-mode');
+    }
     try {
       localStorage.setItem('stlt-lang', 'pt');
       sessionStorage.setItem('stlt-no-sponsor', '1');

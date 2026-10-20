@@ -148,11 +148,13 @@
 /* ── Modo embutido (?embed=1): só o 3D ──
    Os controles ficam na página que embute; o painel original continua no
    DOM (o main.js depende dele), só não aparece. */
+/* A classe entra no <html> já no <head> (index.html), antes de tudo pintar. */
 .embed-mode #settings-panel,
 .embed-mode #sidebar-toggle,
 .embed-mode #gallery-panel,
 .embed-mode #viewport-footer,
-.embed-mode #mesh-diagnostics { display: none !important; }
+.embed-mode #mesh-diagnostics,
+.embed-mode #drop-hint { display: none !important; }
 .embed-mode main { flex-direction: row !important; }
 .embed-mode #viewport-section {
   flex: 1 1 auto !important;
@@ -161,4 +163,5 @@
   min-height: 0 !important;
   max-height: none !important;
 }
-.embed-mode { background: var(--bg); }
+html.embed-mode,
+html.embed-mode body { background: #faf6ee; }

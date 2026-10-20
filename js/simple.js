@@ -110,6 +110,7 @@ const controls = {
     if (!on) controls.resumeMarking();
   },
   loadModel(file)   { if (file instanceof File) setFile($('stl-file-input'), file); },
+  resetModel()      { app.resetModel(); },
   loadTexture(file) { if (file instanceof File) setFile($('texture-file-input'), file); },
   async selectTexture(name) {
     const idx = IMAGE_PRESETS.findIndex((p) => p.name === name);
@@ -453,6 +454,7 @@ function buildPanel() {
 
 const COMMANDS = {
   model: (v) => controls.loadModel(v),
+  'model-reset': () => controls.resetModel(),
   'texture-file': (v) => controls.loadTexture(v),
   texture: (v) => controls.selectTexture(v),
   shape: (v) => controls.setShape(v),

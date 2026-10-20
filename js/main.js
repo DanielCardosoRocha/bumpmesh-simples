@@ -6653,4 +6653,6 @@ initSimple({
   setErase: (on) => { eraseMode = !!on; },
   setAutoMarking: (on) => { autoMarking = !!on; _autoPress = null; },
   undo: () => _undo(),
+  // Lixeira da peça: volta para o cubo de exemplo.
+  resetModel: () => loadDefaultCube(),
 });

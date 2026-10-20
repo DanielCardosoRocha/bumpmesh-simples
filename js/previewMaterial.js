@@ -464,7 +464,8 @@ const fragmentShader = /* glsl */`
     // plain neutral grey, so "teal = active layer" reads at a glance and the
     // other layers' relief still shows through the shading.
     vec3 inactiveGrey  = vec3(0.55, 0.57, 0.59);
-    vec3 userMaskColor = layeredTint == 1 ? inactiveGrey : vec3(0.85, 0.40, 0.15);
+    // Versão simplificada: área marcada sem textura em cinza claro (o laranja original some na peça amarela).
+    vec3 userMaskColor = layeredTint == 1 ? inactiveGrey : vec3(0.66, 0.69, 0.73);
     vec3 angleMaskColor = layeredTint == 1 ? inactiveGrey : vec3(0.45, 0.48, 0.50);
 
     vec3 L1 = normalize(vec3( 0.5,  0.8,  1.0));

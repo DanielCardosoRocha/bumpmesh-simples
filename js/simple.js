@@ -118,7 +118,50 @@ const controls = {
     const btn = $('export-btn');
     if (!btn.disabled) btn.click();
   },
+
+  // ── Onde aplicar: textura só em parte da peça ──
+  // 'all' = peça toda; 'include' = só onde marcar; 'exclude' = menos onde marcar.
+  // Os botões originais de modo já ligam o balde quando não há ferramenta.
+  setMaskMode(mode) {
+    if (mode === 'all') {
+      if (isActive($('excl-mode-include'))) $('excl-mode-exclude').click();
+      $('excl-clear-btn').click();
+      controls.setTool(null);
+      erase = false;
+      app.setErase(false);
+    } else if (mode === 'include') {
+      $('excl-mode-include').click();
+    } else if (mode === 'exclude') {
+      $('excl-mode-exclude').click();
+    }
+    maskMode = mode;
+  },
+  /** 'bucket' (face inteira), 'brush' (pincel) ou null (só girar a peça). */
+  setTool(tool) {
+    const current = activeTool();
+    if (current === tool) return;
+    // Clicar no botão da ferramenta ativa desliga; no outro, troca.
+    if (tool === null) $(`excl-${current}-btn`)?.click();
+    else $(`excl-${tool}-btn`).click();
+  },
+  setBrushSize(mm) { if (Number.isFinite(mm) && mm > 0) setInput($('excl-brush-radius-val'), mm); },
+  setErase(on) {
+    erase = !!on;
+    app.setErase(erase);
+  },
+  clearMask() { $('excl-clear-btn').click(); },
 };
+
+const isActive = (el) => !!el && el.classList.contains('active');
+
+function activeTool() {
+  if (isActive($('excl-brush-btn'))) return 'brush';
+  if (isActive($('excl-bucket-btn'))) return 'bucket';
+  return null;
+}
+
+let maskMode = null;   // definido na primeira leitura (pode vir da sessão salva)
+let erase = false;
 
 function readState() {
   return {
@@ -140,6 +183,12 @@ function readState() {
     amplitudeWarning: !isHidden($('amplitude-warning')),
     // Resultado da checagem rápida da malha ("✔ A malha parece boa" ou o problema).
     meshCheck: isHidden($('mesh-diagnostics')) ? null : $('mesh-diag-fast').textContent.trim() || null,
+    maskMode: maskMode ?? (isActive($('excl-mode-include')) ? 'include' : 'all'),
+    tool: activeTool(),
+    brushSize: Number($('excl-brush-radius-val').value),
+    erase,
+    /** "12 faces selecionadas" / "3 faces mascaradas" */
+    maskCount: $('excl-count').textContent.trim(),
   };
 }
 
@@ -156,6 +205,13 @@ function watchChanges() {
   observe($('mesh-diagnostics'), { attributes: true, childList: true, characterData: true, subtree: true });
   // A textura ativa é marcada na grade de favoritos (inclusive a escolhida no início).
   observe($('preset-grid'), { attributes: true, subtree: true, attributeFilter: ['class'] });
+  // Marcação: ferramenta e modo ativos, contagem de faces marcadas.
+  for (const id of ['excl-brush-btn', 'excl-bucket-btn', 'excl-mode-include', 'excl-mode-exclude']) {
+    observe($(id), { attributes: true, attributeFilter: ['class'] });
+  }
+  observe($('excl-count'), { childList: true, characterData: true, subtree: true });
+  // Shift no teclado também apaga; ao soltar, volta ao que o botão diz.
+  document.addEventListener('keyup', (e) => { if (e.key === 'Shift' && erase) app.setErase(true); });
 
   // A cada peça carregada o original recalcula a resolução para o tamanho dela.
   // Esse valor vira a base, e a qualidade escolhida é aplicada por cima.
@@ -350,6 +406,11 @@ function buildPanel() {
 //   seam / rotation          0–1 / graus
 //   top / bottom / preview   boolean
 //   export                   baixa o STL
+//   mask-mode                'all' | 'include' | 'exclude' (onde aplicar)
+//   tool                     'bucket' | 'brush' | null (marcar faces no 3D)
+//   brush-size               mm (diâmetro do pincel)
+//   erase                    boolean (marcar apaga em vez de marcar)
+//   mask-clear               limpa a marcação
 
 const COMMANDS = {
   model: (v) => controls.loadModel(v),
@@ -365,6 +426,11 @@ const COMMANDS = {
   bottom: (v) => controls.setBottom(!!v),
   preview: (v) => controls.setPreview(!!v),
   export: () => controls.exportStl(),
+  'mask-mode': (v) => controls.setMaskMode(v),
+  tool: (v) => controls.setTool(v ?? null),
+  'brush-size': (v) => controls.setBrushSize(Number(v)),
+  erase: (v) => controls.setErase(!!v),
+  'mask-clear': () => controls.clearMask(),
 };
 
 function initEmbed() {

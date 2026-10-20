@@ -27,6 +27,9 @@ const $ = (id) => document.getElementById(id);
 // Ângulo usado para "não texturizar" topo/base (o padrão do original para a base).
 const MASK_ANGLE = 5;
 
+// Marca na sessão: os padrões desta versão já foram aplicados nesta aba.
+const DEFAULTS_KEY = 'bumpmesh-simples-defaults';
+
 // Qualidade: multiplica a resolução que o original calcula para cada peça
 // (1/250 da diagonal) e define o limite de triângulos do arquivo final.
 const QUALITY = {
@@ -400,6 +403,17 @@ export function initSimple(appApi) {
   app = appApi;
   const embedded = new URLSearchParams(location.search).has('embed');
   if (embedded) document.body.classList.add('embed-mode');
+
+  // Padrão desta versão: textura no topo e na base. Aplicado uma vez por aba;
+  // depois vale o que a pessoa deixou (o original guarda os ajustes na sessão
+  // do navegador, e já salva durante a inicialização, por isso a marca própria).
+  let applied = false;
+  try { applied = sessionStorage.getItem(DEFAULTS_KEY) === '1'; } catch { /* modo privado */ }
+  if (!applied) {
+    controls.setTop(true);
+    controls.setBottom(true);
+    try { sessionStorage.setItem(DEFAULTS_KEY, '1'); } catch { /* modo privado */ }
+  }
 
   baseEdge = Number($('refine-length-val').value) || 1;
   watchChanges();

@@ -26,7 +26,7 @@ import { subdivide }          from './subdivision.js';
 import { runExportPipeline }  from './exportPipeline.js';
 import { runPreviewPipeline, computeFaceNormals } from './previewPipeline.js';
 import { exportSTL, export3MF } from './exporter.js';
-import { buildAdjacency, bucketFill,
+import { buildAdjacency, bucketFill, preciseFill,
          buildExclusionOverlayGeo, buildFaceWeights } from './exclusion.js';
 import { buildSoftExclusion, softPaintedFaces } from './softMask.js';
 import { PaintTree } from './paintTree.js';
@@ -90,6 +90,11 @@ let brushRadius        = 5.0;
 let brushHardness      = 0.5;         // circle brush: 1 = hard, leaf-exact; < 1 = soft, coverage per tree vertex
 let brushPrecision     = true;        // circle brush: true = Precision (refines under the stroke), false = Standard (whole triangles)
 let bucketThreshold    = 20;
+// Versão simplificada: clique "Preciso" (uma face como no CAD, exclusion.js).
+let bucketPrecise      = false;
+const fillFrom = (triIdx) => bucketPrecise
+  ? preciseFill(triIdx, triangleAdjacency, currentGeometry)
+  : bucketFill(triIdx, triangleAdjacency, bucketThreshold);
 let isPainting         = false;
 let selectionMode      = false;       // false = exclude painted faces; true = include only painted faces
 let maskModeChosen     = false;       // false until the user (or a loaded/seeded mask) engages surface masking — neither mode button is highlighted
@@ -146,6 +151,9 @@ const settings = {
   // without the key fall back to 'linear' — the only ramp they had.
   boundaryFalloffCurve: 'ease',
   symmetricDisplacement: false,
+  // Relief sinks into the part (white tops stay on the original surface),
+  // so the part keeps its outer size. Ignored when symmetric is on.
+  inwardDisplacement: true,
   noDownwardZ: false,
   smoothBottom: true,
   harvestFlatFaces: true,
@@ -193,7 +201,7 @@ const LAYER_KEYS = [
   'mappingMode', 'scaleU', 'scaleV', 'lockScale',
   'offsetU', 'offsetV', 'rotation',
   'amplitude', 'textureHeight', 'invertDisplacement', 'invertTexture', 'textureSmoothing',
-  'symmetricDisplacement', 'mappingBlend', 'seamBandWidth', 'capAngle',
+  'symmetricDisplacement', 'inwardDisplacement', 'mappingBlend', 'seamBandWidth', 'capAngle',
   'boundaryFalloff', 'boundaryFalloffCurve',
   'snapSeamlessWrap', 'cylinderCenterX', 'cylinderCenterY', 'cylinderRadius',
 ];
@@ -419,6 +427,7 @@ const falloffCurveButtons      = {
   ease:   document.getElementById('falloff-curve-ease'),
 };
 const symmetricDispToggle    = document.getElementById('symmetric-displacement');
+const inwardDispToggle       = document.getElementById('inward-displacement');
 const dispPreviewToggle      = document.getElementById('displacement-preview');
 const dispPreviewSpinner     = document.getElementById('displacement-preview-spinner');
 const noDownwardZChk         = document.getElementById('no-downward-z-chk');
@@ -1697,6 +1706,10 @@ function wireEvents() {
     settings.symmetricDisplacement = symmetricDispToggle.checked;
     updatePreview();
   });
+  inwardDispToggle.addEventListener('change', () => {
+    settings.inwardDisplacement = inwardDispToggle.checked;
+    updatePreview();
+  });
   noDownwardZChk.addEventListener('change', () => {
     settings.noDownwardZ = noDownwardZChk.checked;
     updatePreview();
@@ -2019,7 +2032,7 @@ function wireEvents() {
       const triIdx = pickTriangle(e);
       if (triIdx >= 0) {
         // Bucket fill works on base faces: every leaf of a filled face is painted.
-        const filled = bucketFill(triIdx, triangleAdjacency, bucketThreshold);
+        const filled = fillFrom(triIdx);
         paintTree.paintFaces(_activeSlot(), filled, eraseMode);
         refreshExclusionOverlay();
         _lastHoverTriIdx = -1;
@@ -2105,7 +2118,7 @@ function wireEvents() {
       _autoPress = null;
       getControls().enabled = true;
       if (paintTree) {
-        paintTree.paintFaces(_activeSlot(), bucketFill(triIdx, triangleAdjacency, bucketThreshold), eraseMode);
+        paintTree.paintFaces(_activeSlot(), fillFrom(triIdx), eraseMode);
         refreshExclusionOverlay();
         _lastHoverTriIdx = -1;
         setHoverPreview(null);
@@ -2743,6 +2756,7 @@ function _previewLayers() {
       // a map that is still loading has nothing to show yet either.
       amplitude: (L.visible && entry) ? s.amplitude : 0,
       symmetricDisplacement: s.symmetricDisplacement,
+      inwardDisplacement: s.inwardDisplacement,
       mappingBlend: s.mappingBlend, seamBandWidth: s.seamBandWidth, capAngle: s.capAngle,
       cylinderCenterX: s.cylinderCenterX, cylinderCenterY: s.cylinderCenterY, cylinderRadius: s.cylinderRadius,
       textureAspectU: tmax / Math.max(tw, 1), textureAspectV: tmax / Math.max(th, 1),
@@ -3471,7 +3485,7 @@ function updateBucketHover(e) {
     setHoverPreview(null);
     return;
   }
-  const hovered = bucketFill(triIdx, triangleAdjacency, bucketThreshold);
+  const hovered = fillFrom(triIdx);
   setHoverPreview(buildExclusionOverlayGeo(currentGeometry, hovered), eraseMode ? 0x999999 : HOVER_COLOR);
 }
 
@@ -5604,7 +5618,7 @@ const PERSISTED_KEYS = [
   'offsetU', 'offsetV', 'rotation',
   'amplitude', 'textureHeight', 'invertDisplacement',
   'invertTexture',
-  'symmetricDisplacement', 'noDownwardZ', 'smoothBottom', 'harvestFlatFaces', 'harvestTol', 'preserveUntextured', 'textureSmoothing',
+  'symmetricDisplacement', 'inwardDisplacement', 'noDownwardZ', 'smoothBottom', 'harvestFlatFaces', 'harvestTol', 'preserveUntextured', 'textureSmoothing',
   'mappingBlend', 'seamBandWidth', 'capAngle', 'boundaryFalloff', 'boundaryFalloffCurve',
   'bottomAngleLimit', 'topAngleLimit',
   'refineLength', 'maxTriangles',
@@ -5851,6 +5865,9 @@ function applySettingsSnapshot(snap) {
     symmetricDispToggle.checked = snap.symmetricDisplacement;
     symmetricDispToggle.dispatchEvent(new Event('change', { bubbles: true }));
   }
+  // Snapshots from before the inward option grew their relief outward.
+  inwardDispToggle.checked = snap.inwardDisplacement ?? false;
+  inwardDispToggle.dispatchEvent(new Event('change', { bubbles: true }));
   if (snap.noDownwardZ != null) {
     noDownwardZChk.checked = snap.noDownwardZ;
     noDownwardZChk.dispatchEvent(new Event('change', { bubbles: true }));
@@ -5966,7 +5983,7 @@ const DEFAULT_SETTINGS_SNAPSHOT = Object.freeze({
   offsetU: 0, offsetV: 0, rotation: 0,
   amplitude: 0.5, textureHeight: 0.5, invertDisplacement: false,
   invertTexture: false,
-  symmetricDisplacement: false, noDownwardZ: false, smoothBottom: true, harvestFlatFaces: true, harvestTol: 0.005, preserveUntextured: true, textureSmoothing: 0,
+  symmetricDisplacement: false, inwardDisplacement: true, noDownwardZ: false, smoothBottom: true, harvestFlatFaces: true, harvestTol: 0.005, preserveUntextured: true, textureSmoothing: 0,
   mappingBlend: 1, seamBandWidth: 0.5, capAngle: 20, boundaryFalloff: 0,
   boundaryFalloffCurve: 'ease',
   bottomAngleLimit: 5, topAngleLimit: 0,
@@ -6652,6 +6669,8 @@ initSimple({
   // Apagar marcação sem precisar segurar Shift (celular, tablet, mouse só).
   setErase: (on) => { eraseMode = !!on; },
   setAutoMarking: (on) => { autoMarking = !!on; _autoPress = null; },
+  setPreciseFill: (on) => { bucketPrecise = !!on; _lastHoverTriIdx = -1; },
+  preciseFill: () => bucketPrecise,
   undo: () => _undo(),
   // Lixeira da peça: volta para o cubo de exemplo.
   resetModel: () => loadDefaultCube(),

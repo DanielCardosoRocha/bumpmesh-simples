@@ -96,12 +96,19 @@ const controls = {
     applyQuality();
   },
   setAmplitude(mm) { if (Number.isFinite(mm)) setInput($('amplitude-val'), mm); },
+  setDirection(value) {
+    if (value !== 'dentro' && value !== 'fora') return;
+    const box = $('inward-displacement');
+    box.checked = value === 'dentro';
+    box.dispatchEvent(new Event('change', { bubbles: true }));
+  },
   setScale(mm)     { if (Number.isFinite(mm) && mm > 0) setInput($('scale-u-val'), mm); },
   setSeam(v)       { if (Number.isFinite(v)) setInput($('seam-band-width-val'), v); },
   setRotation(deg) { if (Number.isFinite(deg)) setInput($('rotation-val'), deg); },
   setTop(on)    { setInput($('top-angle-limit'), on ? 0 : MASK_ANGLE, 'input'); },
   setBottom(on) { setInput($('bottom-angle-limit'), on ? 0 : MASK_ANGLE, 'input'); },
   setPreview(on) {
+    previewWanted = !!on;
     const box = $('displacement-preview');
     if (box.checked === !!on) return;
     box.checked = !!on;
@@ -167,6 +174,16 @@ const controls = {
     else $(`excl-${tool}-btn`).click();
   },
   setBrushSize(mm) { if (Number.isFinite(mm) && mm > 0) setInput($('excl-brush-radius-val'), mm); },
+  /**
+   * Até onde o clique espalha a pintura: 'amplo' (quinas de até 30°),
+   * 'normal' (20°, o padrão do original) ou 'preciso' (para onde a curva
+   * muda: separa lateral, arredondado e topo; preciseFill, exclusion.js).
+   */
+  setFillMode(mode) {
+    if (!FILL_ANGLES[mode] && mode !== 'preciso') return;
+    app.setPreciseFill(mode === 'preciso');
+    if (mode !== 'preciso') setInput($('excl-threshold-val'), FILL_ANGLES[mode]);
+  },
   setErase(on) {
     erase = !!on;
     app.setErase(erase);
@@ -178,15 +195,18 @@ const isActive = (el) => !!el && el.classList.contains('active');
 
 /**
  * Marcação automática: pincel ativo em que clique rápido marca a face inteira
- * e arrastar pinta (main.js). Enquanto marca, o botão direito gira a peça
- * (no original ele move a câmera), para dar para girar mesmo com a peça
- * ocupando o 3D todo.
+ * e arrastar pinta (main.js). O botão direito sempre move a câmera (pan);
+ * enquanto marca, o botão do meio gira a peça, para dar para girar mesmo com
+ * a peça ocupando o 3D todo.
  */
 function setMarking(on) {
   app.setAutoMarking(on);
   controls.setTool(on ? 'brush' : null);
   const orbit = getControls();
-  if (orbit) orbit.mouseButtons.RIGHT = on ? THREE.MOUSE.ROTATE : THREE.MOUSE.PAN;
+  if (orbit) {
+    orbit.mouseButtons.RIGHT = THREE.MOUSE.PAN;
+    orbit.mouseButtons.MIDDLE = on ? THREE.MOUSE.ROTATE : THREE.MOUSE.DOLLY;
+  }
 }
 
 function activeTool() {
@@ -195,7 +215,39 @@ function activeTool() {
   return null;
 }
 
+// ── Prévia 3D real ligada por padrão ─────────────────────────────────────────
+// O original começa com ela desligada e a desliga a cada peça nova, ao girar
+// e ao marcar. Aqui ela volta sozinha assim que há peça e textura, até a
+// pessoa desligar na chave. Uma tentativa por peça e textura, para não
+// insistir numa prévia que falhou; marcar libera uma nova tentativa depois.
+let previewWanted = true;
+let meshGen = 0;            // sobe a cada peça carregada ou girada (mesh-info)
+let previewTriedFor = null;
+
+function keepPreview() {
+  if (!previewWanted) return;
+  if (activeTool()) { previewTriedFor = null; return; }
+  if (!isHidden($('export-progress'))) return;
+  const box = $('displacement-preview');
+  if (box.checked) return;
+  const texture = app.activeMapName();
+  if (!texture || !$('mesh-info').textContent.trim()) return;
+  const key = `${meshGen}|${texture}`;
+  if (key === previewTriedFor) return;
+  previewTriedFor = key;
+  box.checked = true;
+  box.dispatchEvent(new Event('change', { bubbles: true }));
+  notify();
+}
+
 let maskMode = null;   // definido na primeira leitura (pode vir da sessão salva)
+
+const FILL_ANGLES = { amplo: 30, normal: 20 };
+function fillMode() {
+  if (app.preciseFill()) return 'preciso';
+  const angle = Number($('excl-threshold-val').value);
+  return Object.keys(FILL_ANGLES).find((mode) => FILL_ANGLES[mode] === angle) ?? null;
+}
 let erase = false;
 
 function readState() {
@@ -205,6 +257,7 @@ function readState() {
     shape: $('mapping-mode').value === SHAPES.redonda ? 'redonda' : 'reta',
     quality,
     amplitude: Number($('amplitude-val').value),
+    direction: $('inward-displacement').checked ? 'dentro' : 'fora',
     scale: Number($('scale-u-val').value),
     seam: Number($('seam-band-width-val').value),
     rotation: Number($('rotation-val').value),
@@ -221,6 +274,7 @@ function readState() {
     maskMode: maskMode ?? (isActive($('excl-mode-include')) ? 'include' : 'all'),
     tool: activeTool(),
     brushSize: Number($('excl-brush-radius-val').value),
+    fillMode: fillMode(),
     erase,
     canUndo: !$('undo-btn').disabled,
     /** "12 faces selecionadas" / "3 faces mascaradas" */
@@ -253,6 +307,7 @@ function watchChanges() {
   // A cada peça carregada o original recalcula a resolução para o tamanho dela.
   // Esse valor vira a base, e a qualidade escolhida é aplicada por cima.
   new MutationObserver(() => {
+    meshGen++;
     const refine = $('refine-length-val');
     if (refine.value !== lastApplied) {
       baseEdge = Number(refine.value) || baseEdge;
@@ -355,11 +410,14 @@ function buildPanel() {
   // ── 4. Ajustes: profundidade e tamanho ──
   const amplitudeRow = $('amplitude').closest('.form-row');
   setLabel(amplitudeRow.querySelector('label'), 'Profundidade (mm)',
-    'Quanto a textura sobe da superfície da peça.');
+    'Altura do relevo da textura.');
+  const direction = segmented({ dentro: 'Para dentro', fora: 'Para fora' }, state.direction, controls.setDirection);
   const scaleRow = $('scale-u').closest('.form-row');
   setLabel(scaleRow.querySelector('label'), 'Tamanho da textura (mm)',
     'Tamanho de cada repetição do desenho. Menor = padrão mais miúdo.');
-  const adjustSection = section('Ajustes', amplitudeRow, scaleRow, $('amplitude-warning'));
+  const adjustSection = section('Ajustes', direction.el,
+    note('Para dentro: a textura afunda e a peça mantém as medidas. Para fora: o relevo sobe da superfície.'),
+    amplitudeRow, scaleRow, $('amplitude-warning'));
 
   // ── 5. Qualidade + exportar ──
   const qualitySeg = segmented({ leve: 'Leve', normal: 'Normal', detalhado: 'Detalhado' }, quality, controls.setQuality);
@@ -439,6 +497,7 @@ function buildPanel() {
 //   texture                  value: nome da textura (IMAGE_PRESETS[].name)
 //   shape                    'redonda' | 'reta'
 //   quality                  'leve' | 'normal' | 'detalhado'
+//   direction                'dentro' | 'fora' (relevo afunda ou sobe)
 //   amplitude / scale        mm
 //   seam / rotation          0–1 / graus
 //   top / bottom / preview   boolean
@@ -446,6 +505,7 @@ function buildPanel() {
 //   mask-mode                'all' | 'include' | 'exclude' (onde aplicar)
 //   tool                     'bucket' | 'brush' | null (marcar faces no 3D)
 //   brush-size               mm (diâmetro do pincel)
+//   fill-mode                'amplo' | 'normal' | 'preciso' (até onde o clique pinta)
 //   erase                    boolean (marcar apaga em vez de marcar)
 //   mask-clear               limpa a marcação
 //   mask-resume              volta a marcar depois de uma pausa (Esc, prévia real)
@@ -459,6 +519,7 @@ const COMMANDS = {
   texture: (v) => controls.selectTexture(v),
   shape: (v) => controls.setShape(v),
   quality: (v) => controls.setQuality(v),
+  direction: (v) => controls.setDirection(v),
   amplitude: (v) => controls.setAmplitude(Number(v)),
   scale: (v) => controls.setScale(Number(v)),
   seam: (v) => controls.setSeam(Number(v)),
@@ -470,6 +531,7 @@ const COMMANDS = {
   'mask-mode': (v) => controls.setMaskMode(v),
   tool: (v) => controls.setTool(v ?? null),
   'brush-size': (v) => controls.setBrushSize(Number(v)),
+  'fill-mode': (v) => controls.setFillMode(v),
   erase: (v) => controls.setErase(!!v),
   'mask-clear': () => controls.clearMask(),
   'mask-resume': () => controls.resumeMarking(),
@@ -527,6 +589,7 @@ export function initSimple(appApi) {
 
   baseEdge = Number($('refine-length-val').value) || 1;
   watchChanges();
+  listeners.add(keepPreview);
   if (!embedded) buildPanel();
   applyQuality();
 

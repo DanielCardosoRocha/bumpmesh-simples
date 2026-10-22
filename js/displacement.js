@@ -75,6 +75,7 @@ export function applyDisplacement(geometry, imageData, imgWidth, imgHeight, sett
  *   imageData, imgWidth, imgHeight
  *   settings   per-layer projection/displacement settings (mappingMode,
  *              scaleU/V, offsetU/V, rotation, amplitude, symmetricDisplacement,
+ *              inwardDisplacement,
  *              mappingBlend, seamBandWidth, capAngle, cylinder*, boundaryFalloff,
  *              boundaryFalloffCurve)
  *   exclude    Float32Array|null  per-corner exclusion amount on `geometry`
@@ -564,7 +565,9 @@ export function applyDisplacementLayers(geometry, layers, settings, bounds, onPr
     // watertight and the decimator cannot collapse the excluded patch to zero
     // faces.
     const softMax = layer._softMax;
-    const symmetric = !!lset.symmetricDisplacement;
+    // Grey level that stays on the surface: 0 = relief grows outward, 0.5 =
+    // symmetric, 1 = relief sinks inward (white tops stay on the surface).
+    const centre = lset.symmetricDisplacement ? 0.5 : (lset.inwardDisplacement ? 1 : 0);
     const amplitude = lset.amplitude;
     const blendAdd = !!layer.blendAdd;
     for (let vid = 0; vid < uniqueCount; vid++) {
@@ -572,7 +575,7 @@ export function applyDisplacementLayers(geometry, layers, settings, bounds, onPr
       const pinned = isPinned(vid);
       const mfTotal = maskedFracTotal[vid];
       const maskedFrac = mfTotal > 0 ? maskedFracMasked[vid] / mfTotal : 0;
-      const centeredGrey = symmetric ? (grey - 0.5) : grey;
+      const centeredGrey = grey - centre;
       const falloffFactor = falloffArr ? falloffArr[vid] : 1.0;
       let disp = pinned ? 0 : falloffFactor * (1 - maskedFrac) * centeredGrey * amplitude;
       if (softMax) disp *= 1 - softMax[vid];
@@ -598,7 +601,7 @@ export function applyDisplacementLayers(geometry, layers, settings, bounds, onPr
           const k = creases.start[s] + g;
           const gArea = creases.area[k];
           const maskedFrac = gArea > 0 ? creases.masked[k] / gArea : 0;
-          const centeredGrey = symmetric ? (groupGrey[k] - 0.5) : groupGrey[k];
+          const centeredGrey = groupGrey[k] - centre;
           let disp = pinned ? 0 : falloffFactor * (1 - maskedFrac) * centeredGrey * amplitude;
           if (softMax) disp *= 1 - softMax[vid];
           if (li === 0) {
@@ -900,7 +903,7 @@ function _creaseMoves(cr, groupAcc, snX, snY, snZ) {
     const base = cr.start[s];
     const n = cr.groups[s];
 
-    let hSum = 0, aSum = 0, hMax = 0;
+    let hSum = 0, aSum = 0, hMax = 0, hTop = -Infinity;
     for (let g = 0; g < n; g++) {
       const k = base + g;
       const a = cr.area[k];
@@ -908,6 +911,7 @@ function _creaseMoves(cr, groupAcc, snX, snY, snZ) {
       const h = groupAcc[k];
       hSum += a * h; aSum += a;
       if (Math.abs(h) > hMax) hMax = Math.abs(h);
+      if (h > hTop) hTop = h;
     }
     if (hMax === 0) continue;
     const vid = cr.vidOf[s];
@@ -940,6 +944,16 @@ function _creaseMoves(cr, groupAcc, snX, snY, snZ) {
         const tx = cr.inX[k], ty = cr.inY[k], tz = cr.inZ[k];
         const dt = dx * tx + dy * ty + dz * tz;
         if (dt > 0) { dx -= dt * tx; dy -= dt * ty; dz -= dt * tz; }
+      }
+    }
+    // A crease where every face sinks must not poke out of any of them. On
+    // a cube corner the guard above can leave part of the move outward; the
+    // corner then stays where it was, like the edges next to it.
+    if (hTop <= 0) {
+      for (let g = 0; g < n; g++) {
+        const k = base + g;
+        if (!(cr.area[k] > 0)) continue;
+        if (dx * cr.nrmX[k] + dy * cr.nrmY[k] + dz * cr.nrmZ[k] > 1e-9) { dx = dy = dz = 0; break; }
       }
     }
 

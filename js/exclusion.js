@@ -190,6 +190,102 @@ export function bucketFill(seedTriIdx, adjacency, thresholdDeg) {
   return visited;
 }
 
+/**
+ * Versão simplificada: clique "Preciso", que pinta uma face da peça como no
+ * CAD (lateral, arredondado e topo separados).
+ *
+ * Um ângulo fixo não separa um arredondado (fillet) das faces que ele
+ * encontra: na emenda, a quina tem só metade do degrau do arredondado, e o
+ * degrau depende de como o STL foi exportado. Aqui a malha é vista em pedaços
+ * retos (triângulos no mesmo plano), e o clique passa de um pedaço para o
+ * vizinho só se a curva continua igual:
+ *  - a quina entre eles se repete do outro lado de um dos dois (o mesmo
+ *    degrau, com 25% de folga): numa lateral de cilindro, toda tira tem o
+ *    mesmo degrau dos dois lados; na emenda com o arredondado, não;
+ *  - os dois têm tamanho parecido (entre 0,4× e 2,5×): o topo reto não
+ *    puxa o primeiro anel do arredondado, que é bem menor que ele;
+ *  - a quina tem no máximo 20°, como no clique Normal.
+ *
+ * @param {number} seedTriIdx
+ * @param {Array<Array<{neighbor:number, angle:number}>>} adjacency
+ * @param {THREE.BufferGeometry} geometry  – non-indexed, a mesma da adjacency
+ * @returns {Set<number>}
+ */
+export function preciseFill(seedTriIdx, adjacency, geometry) {
+  const FLAT = 0.05;    // graus: até isso, mesmo plano (acima do ruído do STL)
+  const MAX = 20;       // graus: quina máxima que o clique atravessa
+  const areas = triangleAreas(geometry);
+  const owner = new Map();   // triângulo → pedaço
+  const patches = [];
+
+  const flatPatch = (start) => {
+    const id = patches.length;
+    const tris = [start];
+    const edges = [];
+    let area = 0;
+    owner.set(start, id);
+    for (let h = 0; h < tris.length; h++) {
+      const tri = tris[h];
+      area += areas[tri];
+      for (const { neighbor, angle } of adjacency[tri] ?? []) {
+        if (angle > FLAT) edges.push({ neighbor, angle });
+        else if (!owner.has(neighbor)) {
+          owner.set(neighbor, id);
+          tris.push(neighbor);
+        }
+      }
+    }
+    const patch = { id, tris, edges, area };
+    patches.push(patch);
+    return patch;
+  };
+  const near = (a, b) => Math.abs(a - b) <= Math.max(0.3, 0.25 * Math.min(a, b));
+  // O mesmo degrau numa outra quina do pedaço (fora da que leva a `otherId`).
+  const repeats = (patch, angle, otherId) =>
+    patch.edges.some((e) => owner.get(e.neighbor) !== otherId && near(e.angle, angle));
+
+  const seed = flatPatch(seedTriIdx);
+  const inRegion = new Set([seed.id]);
+  const queue = [seed];
+  for (let h = 0; h < queue.length; h++) {
+    const cur = queue[h];
+    for (const { neighbor, angle } of cur.edges) {
+      if (angle > MAX) continue;
+      const known = owner.get(neighbor);
+      if (known !== undefined && inRegion.has(known)) continue;
+      const next = known === undefined ? flatPatch(neighbor) : patches[known];
+      const ratio = next.area / (cur.area || 1e-12);
+      if (ratio < 0.4 || ratio > 2.5) continue;
+      if (!repeats(cur, angle, next.id) && !repeats(next, angle, cur.id)) continue;
+      inRegion.add(next.id);
+      queue.push(next);
+    }
+  }
+
+  const filled = new Set();
+  for (const id of inRegion) for (const tri of patches[id].tris) filled.add(tri);
+  return filled;
+}
+
+const _areaCache = new WeakMap();
+/** Área de cada triângulo (geometria non-indexed), guardada por geometria. */
+function triangleAreas(geometry) {
+  let areas = _areaCache.get(geometry);
+  if (areas) return areas;
+  const pos = geometry.attributes.position;
+  const count = pos.count / 3;
+  areas = new Float32Array(count);
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+  for (let t = 0; t < count; t++) {
+    a.fromBufferAttribute(pos, t * 3);
+    b.fromBufferAttribute(pos, t * 3 + 1).sub(a);
+    c.fromBufferAttribute(pos, t * 3 + 2).sub(a);
+    areas[t] = b.cross(c).length() / 2;
+  }
+  _areaCache.set(geometry, areas);
+  return areas;
+}
+
 // ── Overlay geometry ──────────────────────────────────────────────────────────
 
 /**

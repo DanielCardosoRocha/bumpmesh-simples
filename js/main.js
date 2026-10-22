@@ -146,6 +146,9 @@ const settings = {
   // without the key fall back to 'linear' — the only ramp they had.
   boundaryFalloffCurve: 'ease',
   symmetricDisplacement: false,
+  // Relief sinks into the part (white tops stay on the original surface),
+  // so the part keeps its outer size. Ignored when symmetric is on.
+  inwardDisplacement: true,
   noDownwardZ: false,
   smoothBottom: true,
   harvestFlatFaces: true,
@@ -193,7 +196,7 @@ const LAYER_KEYS = [
   'mappingMode', 'scaleU', 'scaleV', 'lockScale',
   'offsetU', 'offsetV', 'rotation',
   'amplitude', 'textureHeight', 'invertDisplacement', 'invertTexture', 'textureSmoothing',
-  'symmetricDisplacement', 'mappingBlend', 'seamBandWidth', 'capAngle',
+  'symmetricDisplacement', 'inwardDisplacement', 'mappingBlend', 'seamBandWidth', 'capAngle',
   'boundaryFalloff', 'boundaryFalloffCurve',
   'snapSeamlessWrap', 'cylinderCenterX', 'cylinderCenterY', 'cylinderRadius',
 ];
@@ -419,6 +422,7 @@ const falloffCurveButtons      = {
   ease:   document.getElementById('falloff-curve-ease'),
 };
 const symmetricDispToggle    = document.getElementById('symmetric-displacement');
+const inwardDispToggle       = document.getElementById('inward-displacement');
 const dispPreviewToggle      = document.getElementById('displacement-preview');
 const dispPreviewSpinner     = document.getElementById('displacement-preview-spinner');
 const noDownwardZChk         = document.getElementById('no-downward-z-chk');
@@ -1697,6 +1701,10 @@ function wireEvents() {
     settings.symmetricDisplacement = symmetricDispToggle.checked;
     updatePreview();
   });
+  inwardDispToggle.addEventListener('change', () => {
+    settings.inwardDisplacement = inwardDispToggle.checked;
+    updatePreview();
+  });
   noDownwardZChk.addEventListener('change', () => {
     settings.noDownwardZ = noDownwardZChk.checked;
     updatePreview();
@@ -2743,6 +2751,7 @@ function _previewLayers() {
       // a map that is still loading has nothing to show yet either.
       amplitude: (L.visible && entry) ? s.amplitude : 0,
       symmetricDisplacement: s.symmetricDisplacement,
+      inwardDisplacement: s.inwardDisplacement,
       mappingBlend: s.mappingBlend, seamBandWidth: s.seamBandWidth, capAngle: s.capAngle,
       cylinderCenterX: s.cylinderCenterX, cylinderCenterY: s.cylinderCenterY, cylinderRadius: s.cylinderRadius,
       textureAspectU: tmax / Math.max(tw, 1), textureAspectV: tmax / Math.max(th, 1),
@@ -5604,7 +5613,7 @@ const PERSISTED_KEYS = [
   'offsetU', 'offsetV', 'rotation',
   'amplitude', 'textureHeight', 'invertDisplacement',
   'invertTexture',
-  'symmetricDisplacement', 'noDownwardZ', 'smoothBottom', 'harvestFlatFaces', 'harvestTol', 'preserveUntextured', 'textureSmoothing',
+  'symmetricDisplacement', 'inwardDisplacement', 'noDownwardZ', 'smoothBottom', 'harvestFlatFaces', 'harvestTol', 'preserveUntextured', 'textureSmoothing',
   'mappingBlend', 'seamBandWidth', 'capAngle', 'boundaryFalloff', 'boundaryFalloffCurve',
   'bottomAngleLimit', 'topAngleLimit',
   'refineLength', 'maxTriangles',
@@ -5851,6 +5860,9 @@ function applySettingsSnapshot(snap) {
     symmetricDispToggle.checked = snap.symmetricDisplacement;
     symmetricDispToggle.dispatchEvent(new Event('change', { bubbles: true }));
   }
+  // Snapshots from before the inward option grew their relief outward.
+  inwardDispToggle.checked = snap.inwardDisplacement ?? false;
+  inwardDispToggle.dispatchEvent(new Event('change', { bubbles: true }));
   if (snap.noDownwardZ != null) {
     noDownwardZChk.checked = snap.noDownwardZ;
     noDownwardZChk.dispatchEvent(new Event('change', { bubbles: true }));
@@ -5966,7 +5978,7 @@ const DEFAULT_SETTINGS_SNAPSHOT = Object.freeze({
   offsetU: 0, offsetV: 0, rotation: 0,
   amplitude: 0.5, textureHeight: 0.5, invertDisplacement: false,
   invertTexture: false,
-  symmetricDisplacement: false, noDownwardZ: false, smoothBottom: true, harvestFlatFaces: true, harvestTol: 0.005, preserveUntextured: true, textureSmoothing: 0,
+  symmetricDisplacement: false, inwardDisplacement: true, noDownwardZ: false, smoothBottom: true, harvestFlatFaces: true, harvestTol: 0.005, preserveUntextured: true, textureSmoothing: 0,
   mappingBlend: 1, seamBandWidth: 0.5, capAngle: 20, boundaryFalloff: 0,
   boundaryFalloffCurve: 'ease',
   bottomAngleLimit: 5, topAngleLimit: 0,

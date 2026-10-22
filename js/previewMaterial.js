@@ -57,7 +57,7 @@ const sharedGLSL = /* glsl */`
   uniform float     layerBlend[MAX_LAYERS];
   uniform float     layerSeamBand[MAX_LAYERS];
   uniform float     layerCapAngle[MAX_LAYERS];
-  uniform int       layerSymmetric[MAX_LAYERS];
+  uniform float     layerCentre[MAX_LAYERS];
   uniform vec2      layerAspect[MAX_LAYERS];
   uniform int       layerAdd[MAX_LAYERS];
   uniform vec3      boundsMin;
@@ -237,12 +237,12 @@ const sharedGLSL = /* glsl */`
     }
   }
 
-  // Layer l's signed height in mm at a point (grey, centred if symmetric,
-  // times the layer's amplitude) — before any mask weight.
+  // Layer l's signed height in mm at a point (grey minus the layer's centre —
+  // 0 outward, 0.5 symmetric, 1 inward — times its amplitude) — before any
+  // mask weight.
   float layerHeightMm(int l, vec3 pos, vec3 projN, vec3 blendN) {
     float h = computeHeightAtPoint(l, pos, projN, blendN);
-    if (layerSymmetric[l] == 1) h = h - 0.5;
-    return h * layerAmp[l];
+    return (h - layerCentre[l]) * layerAmp[l];
   }
 
   // Composite the layers' heights with per-layer weights w (mask × falloff ×
@@ -532,7 +532,7 @@ export function createPreviewMaterial(layers, settings) {
  * @param {THREE.ShaderMaterial} material
  * @param {Array<object>} layers  visible texture layers in composition order
  *   (at most MAX_LAYERS), each: { texture, mappingMode, scaleU, scaleV,
- *   offsetU, offsetV, rotation, amplitude, symmetricDisplacement,
+ *   offsetU, offsetV, rotation, amplitude, symmetricDisplacement, inwardDisplacement,
  *   mappingBlend, seamBandWidth, capAngle, cylinderCenterX, cylinderCenterY,
  *   cylinderRadius, textureAspectU, textureAspectV, blendAdd }
  * @param {object} settings  { bounds, bottomAngleLimit, topAngleLimit,
@@ -573,7 +573,7 @@ export function updateMaterial(material, layers, settings) {
     u.layerBlend.value[l]      = L ? (L.mappingBlend ?? 0) : 0;
     u.layerSeamBand.value[l]   = L ? (L.seamBandWidth ?? 0.35) : 0.35;
     u.layerCapAngle.value[l]   = L ? (L.capAngle ?? 20) : 20;
-    u.layerSymmetric.value[l]  = L && L.symmetricDisplacement ? 1 : 0;
+    u.layerCentre.value[l]     = !L ? 0 : L.symmetricDisplacement ? 0.5 : (L.inwardDisplacement ? 1 : 0);
     u.layerAspect.value[l * 2]     = L ? (L.textureAspectU ?? 1) : 1;
     u.layerAspect.value[l * 2 + 1] = L ? (L.textureAspectV ?? 1) : 1;
     u.layerAdd.value[l]        = L && L.blendAdd ? 1 : 0;
@@ -610,7 +610,7 @@ function buildUniforms() {
     layerBlend:     { value: new Float32Array(MAX_LAYERS) },
     layerSeamBand:  { value: new Float32Array(MAX_LAYERS) },
     layerCapAngle:  { value: new Float32Array(MAX_LAYERS) },
-    layerSymmetric: { value: new Int32Array(MAX_LAYERS) },
+    layerCentre:    { value: new Float32Array(MAX_LAYERS) },
     layerAspect:    { value: new Float32Array(MAX_LAYERS * 2) },
     layerAdd:       { value: new Int32Array(MAX_LAYERS) },
     boundsMin:        { value: new THREE.Vector3() },

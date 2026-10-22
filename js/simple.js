@@ -96,6 +96,12 @@ const controls = {
     applyQuality();
   },
   setAmplitude(mm) { if (Number.isFinite(mm)) setInput($('amplitude-val'), mm); },
+  setDirection(value) {
+    if (value !== 'dentro' && value !== 'fora') return;
+    const box = $('inward-displacement');
+    box.checked = value === 'dentro';
+    box.dispatchEvent(new Event('change', { bubbles: true }));
+  },
   setScale(mm)     { if (Number.isFinite(mm) && mm > 0) setInput($('scale-u-val'), mm); },
   setSeam(v)       { if (Number.isFinite(v)) setInput($('seam-band-width-val'), v); },
   setRotation(deg) { if (Number.isFinite(deg)) setInput($('rotation-val'), deg); },
@@ -205,6 +211,7 @@ function readState() {
     shape: $('mapping-mode').value === SHAPES.redonda ? 'redonda' : 'reta',
     quality,
     amplitude: Number($('amplitude-val').value),
+    direction: $('inward-displacement').checked ? 'dentro' : 'fora',
     scale: Number($('scale-u-val').value),
     seam: Number($('seam-band-width-val').value),
     rotation: Number($('rotation-val').value),
@@ -355,11 +362,14 @@ function buildPanel() {
   // ── 4. Ajustes: profundidade e tamanho ──
   const amplitudeRow = $('amplitude').closest('.form-row');
   setLabel(amplitudeRow.querySelector('label'), 'Profundidade (mm)',
-    'Quanto a textura sobe da superfície da peça.');
+    'Altura do relevo da textura.');
+  const direction = segmented({ dentro: 'Para dentro', fora: 'Para fora' }, state.direction, controls.setDirection);
   const scaleRow = $('scale-u').closest('.form-row');
   setLabel(scaleRow.querySelector('label'), 'Tamanho da textura (mm)',
     'Tamanho de cada repetição do desenho. Menor = padrão mais miúdo.');
-  const adjustSection = section('Ajustes', amplitudeRow, scaleRow, $('amplitude-warning'));
+  const adjustSection = section('Ajustes', direction.el,
+    note('Para dentro: a textura afunda e a peça mantém as medidas. Para fora: o relevo sobe da superfície.'),
+    amplitudeRow, scaleRow, $('amplitude-warning'));
 
   // ── 5. Qualidade + exportar ──
   const qualitySeg = segmented({ leve: 'Leve', normal: 'Normal', detalhado: 'Detalhado' }, quality, controls.setQuality);
@@ -439,6 +449,7 @@ function buildPanel() {
 //   texture                  value: nome da textura (IMAGE_PRESETS[].name)
 //   shape                    'redonda' | 'reta'
 //   quality                  'leve' | 'normal' | 'detalhado'
+//   direction                'dentro' | 'fora' (relevo afunda ou sobe)
 //   amplitude / scale        mm
 //   seam / rotation          0–1 / graus
 //   top / bottom / preview   boolean
@@ -459,6 +470,7 @@ const COMMANDS = {
   texture: (v) => controls.selectTexture(v),
   shape: (v) => controls.setShape(v),
   quality: (v) => controls.setQuality(v),
+  direction: (v) => controls.setDirection(v),
   amplitude: (v) => controls.setAmplitude(Number(v)),
   scale: (v) => controls.setScale(Number(v)),
   seam: (v) => controls.setSeam(Number(v)),
